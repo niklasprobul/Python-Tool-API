@@ -66,7 +66,7 @@ def test_secure_rounds_complete_on_the_in_memory_controller_with_one_package_per
     results, aggregator = _run(FLNetLocalTestConfigDTO(participants=_participants(tmp_path), timeout=60.0))
 
     _assert_every_round_summed(results, aggregator)
-    assert aggregator.packages == {round_nr: len(SITES) for round_nr in range(1, ROUNDS + 1)}
+    assert aggregator.package_counts == {round_nr: len(SITES) for round_nr in range(1, ROUNDS + 1)}
 
 
 @pytest.mark.skipif(
@@ -87,4 +87,4 @@ def test_secure_rounds_complete_on_the_dockerized_controller_with_one_summed_pac
 
     _assert_every_round_summed(results, aggregator)
     # The relay clients' sum, then the coordinator's own payload.
-    assert aggregator.packages == {1: len(SITES), **{round_nr: 2 for round_nr in range(2, ROUNDS + 1)}}
+    assert aggregator.package_counts == {1: len(SITES), **{round_nr: 2 for round_nr in range(2, ROUNDS + 1)}}

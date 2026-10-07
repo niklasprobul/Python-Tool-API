@@ -9,7 +9,8 @@ from pyfedappwrap.engine.federated.models import FLNetMessageMetaDTO
 class AppAggregator(ABC):
     def secure_round(self, round_nr: int) -> bool:
         """
-        Whether the clients send round ``round_nr`` (counted from 1) with SMPC.
+        Whether the clients send round ``round_nr`` with SMPC. Rounds are counted from 1, one per
+        call of ``aggregate``.
 
         On a real controller a secure round delivers one package, the sum of all relay clients,
         instead of one package per client. The in-memory test controller ignores SMPC and still

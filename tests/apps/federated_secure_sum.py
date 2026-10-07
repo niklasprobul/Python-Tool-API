@@ -37,6 +37,10 @@ class SecureSumOutput(AppOutputConfig):
     output: Any = None
 
 
+def is_secure_round(round_nr: int) -> bool:
+    return round_nr > 1
+
+
 def site_values(site_id: str, round_nr: int, n_values: int) -> np.ndarray:
     rng = np.random.default_rng([round_nr, *site_id.encode()])
     return rng.integers(-4000, 4000, n_values) / 4
@@ -49,13 +53,15 @@ def chunked(values: np.ndarray) -> list[list[float]]:
 class SecureSumClientApp(BaseFederatedApp[SecureSumConfig, SecureSumInput, SecureSumOutput]):
     def run_train(self, data: SecureSumInput) -> SecureSumOutput:
         config = self.config or SecureSumConfig()
-        replies = [self.communicator.aggregate(
-            {"site": self.federated_client_id}, AGGREGATOR, communication_id="secure-sum-round-1").data]
-        for round_nr in range(2, config.federated_rounds + 1):
-            payload = chunked(site_values(self.federated_client_id, round_nr, config.n_values))
+        replies = []
+        for round_nr in range(1, config.federated_rounds + 1):
+            if is_secure_round(round_nr):
+                payload = chunked(site_values(self.federated_client_id, round_nr, config.n_values))
+            else:
+                payload = {"site": self.federated_client_id}
             replies.append(self.communicator.aggregate(
                 payload, AGGREGATOR, communication_id=f"secure-sum-round-{round_nr}",
-                smpc=FLNetSMPCSettings(exponent=8)).data)
+                smpc=FLNetSMPCSettings(exponent=8) if is_secure_round(round_nr) else None).data)
         return SecureSumOutput(output=pd.DataFrame(replies))
 
     def run_prediction(self, data: SecureSumInput) -> SecureSumOutput:
@@ -79,16 +85,16 @@ class SecureSumAggregator(AppAggregator):
         self.round_nr = 0
         self.sites: list[str] = []
         self.sums: dict[int, np.ndarray] = {}
-        self.packages: dict[int, int] = {}
+        self.package_counts: dict[int, int] = {}
         self.n_clients: dict[int, int] = {}
 
     def secure_round(self, round_nr: int) -> bool:
-        return round_nr > 1
+        return is_secure_round(round_nr)
 
     def aggregate(self, data: list[Any], n_clients: int,
                   meta: Optional[FLNetMessageMetaDTO] = None) -> Any:
         self.round_nr += 1
-        self.packages[self.round_nr] = len(data)
+        self.package_counts[self.round_nr] = len(data)
         self.n_clients[self.round_nr] = n_clients
         if self.round_nr == 1:
             self.sites = sorted(payload["site"] for payload in data)
