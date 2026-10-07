@@ -285,6 +285,14 @@ class LocalFederatedRunner:
                 continue
         return 1
 
+    def _secure_round(self, round_nr: int) -> bool:
+        """Ask the registered aggregators whether the clients send this round with SMPC. The round's
+        aggregator is known only from its packages, so all of them must agree."""
+        answers = {aggregator.secure_round(round_nr) for aggregator in self._aggregators.values()}
+        if len(answers) > 1:
+            raise ValueError(f"The registered aggregators disagree on whether round {round_nr} is secure.")
+        return answers == {True}
+
     @staticmethod
     def _aggregator_output_filename(participant: FLNetLocalParticipantConfigDTO) -> str:
         return participant.hyper_params.get("output_filename", "aggregated.csv")
@@ -345,15 +353,20 @@ class LocalFederatedRunner:
         n_relay_clients = len(communicator.client_ids)
         try:
             for round_nr in range(1, n_rounds + 1):
-                logger.info("[AGGREGATOR] round %d/%d: awaiting %d relay client package(s)%s",
-                            round_nr, n_rounds, n_relay_clients,
+                # In a secure round a real controller delivers the relay clients' SMPC sum as one
+                # package; the in-memory controller ignores SMPC and delivers one per client.
+                summed = self._secure_round(round_nr) and self._uses_external_controller()
+                n_packages = 1 if summed else n_relay_clients
+                logger.info("[AGGREGATOR] round %d/%d: awaiting %d relay client package(s)%s%s",
+                            round_nr, n_rounds, n_packages,
+                            " (SMPC sum)" if summed else "",
                             " + 1 coordinator (bridge)" if bridge is not None else "")
                 # communication_id=None: accept whatever round comm-id the clients send (they use a
                 # per-round id like '<base>-round-N'); passing the base would never match it (the
                 # controller does exact matching on a manual comm-id) and the round would never complete.
                 grouped_packages = communicator.await_data_from_clients(
                     to_aggregator=None,
-                    num_data_packages_per_communication_round=n_relay_clients,
+                    num_data_packages_per_communication_round=n_packages,
                     communication_id=None,
                 )
                 communication_id, packages = next(iter(grouped_packages.items()))
@@ -374,7 +387,8 @@ class LocalFederatedRunner:
                             "Coordinator contribution missing for %s; aggregating relay clients only",
                             communication_id,
                         )
-                aggregated = communicator.aggregate(packages, aggregator_key)
+                n_sites = len(packages) + (n_relay_clients - 1 if summed else 0)
+                aggregated = communicator.aggregate(packages, aggregator_key, n_clients=n_sites)
                 logger.info("[AGGREGATOR] round %d: aggregated %d package(s); broadcasting comm_id=%r from_aggregator=%r "
                             "(clients await from_aggregator they sent to)",
                             round_nr, len(packages), communication_id, aggregator_key)

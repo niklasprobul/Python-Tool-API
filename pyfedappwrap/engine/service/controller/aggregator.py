@@ -32,7 +32,7 @@ class FLNetCommunicatorAggregator(FLNetCommunicator):
         self._aggregators[key] = aggregator
 
     def aggregate(self, packages: List[FLNetDataPackageDTO],
-                  aggregator_name: str) -> Any:
+                  aggregator_name: str, n_clients: Optional[int] = None) -> Any:
         aggregator = self._aggregators.get(aggregator_name)
         if aggregator is None:
             raise KeyError(
@@ -42,7 +42,7 @@ class FLNetCommunicatorAggregator(FLNetCommunicator):
             raise ValueError("Cannot aggregate an empty package list.")
         return aggregator.aggregate(
             [package.data for package in packages],
-            n_clients=len(packages),
+            n_clients=len(packages) if n_clients is None else n_clients,
             meta=packages[-1].meta,
         )
 

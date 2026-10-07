@@ -1,0 +1,49 @@
+# The SDK's compose file with FL-Net's public staging images. Unlike the private tmptag images, these
+# need RELAY_MODE=dev and a TLS mode, as in FL-Net's e2etests/e2e_test_dockerized.sh.
+services:
+  controller:
+    image: ghcr.io/fedlearnnet/federated-learning-communication-api/controller:staging
+    ports:
+      - 8002:8000 # orchestration http
+      - 8003:8001 # app comm http
+    environment:
+      - LOG_LEVEL_STDOUT=debug
+      - LOG_LEVEL_FILE=debug
+      - RELAY_ADDRESS_TCP=relay:9141
+      - RELAY_MODE=dev
+      - RELAY_TLS_MODE=self-signed
+    healthcheck:
+      # This uses bash to send a raw GET request to the local port
+      test: [ "CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/8000; printf \"GET /healthz HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3; grep -q \"200 OK\" <&3'" ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    networks:
+      - fedlearn-sim-network
+
+
+  relay:
+    image: ghcr.io/fedlearnnet/federated-learning-communication-api/controller-relay:staging
+    ports:
+      - 9141:9141 # tcp port
+      - 9140:9140 # http port
+    environment:
+      - LOG_LEVEL_STDOUT=debug
+      - LOG_LEVEL_FILE=debug
+      - RELAY_MODE=dev
+      - RELAY_TLS_MODE=self-signed
+      - RELAY_DOMAIN=relay,localhost
+    healthcheck:
+      # This uses bash to send a raw GET request to the local port
+      test: [ "CMD-SHELL", "bash -ec 'exec 3<>/dev/tcp/127.0.0.1/9140; printf \"GET /healthz HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3; grep -q \"200 OK\" <&3'" ]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    networks:
+      - fedlearn-sim-network
+networks:
+  fedlearn-sim-network:
+    driver: bridge
+    name: fedlearn-sim-network
